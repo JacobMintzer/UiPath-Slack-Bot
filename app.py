@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import json
-#import bot
-#import commands
-#import message
 from multiprocessing import Pool, TimeoutError
 from blocks import Block
+from slack import Slack
 from user import User
 import requests
 from pprint import pprint
@@ -13,25 +11,20 @@ from flask import Flask, request, make_response, render_template
 import asyncio
 import threading
 
-true=True
-false=False
-#pyBot = bot.Bot()
-#slack = pyBot.client
-global eventList
-eventList=[]
 app = Flask(__name__)
-option=Block.option
 releaseSelectionDialog=Block.releaseSelectionDialog
-processSelectionDialog=Block.processSelectionDialog
-authDialog=Block.authDialog
 
-using open("key.txt","r") as file:
-	slackToken=file.read()
+global slackClient
 
-@app.route("/install", methods=["GET"])
+#@app.route("/install", methods=["GET"])
 def pre_install():
 	"""This route renders the installation page with 'Add to Slack' button."""
 
+
+@app.route("/auth", methods=["GET", "POST"])
+def auth():
+	slackClient.OpenAuthDialog(request.form)
+	return "",200
 
 @app.route("/interact", methods=["GET", "POST"])
 def interact():
@@ -42,15 +35,17 @@ def interact():
 	#authentication
 	if source=="auth":
 		SaveCredentials(requestObj)
+		t=threading.Thread(target=slackClient.AddRobot, args=[requestObj])
+		t.start()
 		return "",200
-
 	#select environemnt release
 	elif source=="release":
 		user=User(userId)
 		data=requestObj["view"]["state"]["values"]
 		processID=data["envProcess"]["envProcess"]["selected_option"]["text"]["text"]
 		key=user.CreateJob(processID)
-		t=threading.Thread(target=user.StartJob, args=(key))
+		print (str(type(key)))
+		t=threading.Thread(target=User.StartJob, args=(user,key))
 		t.start()
 		print("assume start job ran")
 		return "",200
@@ -61,8 +56,53 @@ def interact():
 		t.start()
 		print("assume process selected ran")
 		return "",200
+	elif source=="RobotAdd":
+		print("Robot add:\n"+json.dumps(requestObj))
+		SaveRobot(requestObj)
+		return "",200
 	else:
 		return "",200
+
+@app.route("/run", methods=["GET", "POST"])
+def startProcess():
+	userId=request.form['user_id']
+	print (json.dumps(request.form))
+	user=User(userId)
+	if (not user.isComplete):
+		print ("user is none")
+		return "please authenticate using `/auth`", 200
+	if request.form["text"]:
+		return SearchProcess(request, user, slackClient)
+	else:
+		return FavoriteProcesses(request, user, slackClient)
+
+def SaveRobot(requestObj):
+	user=requestObj["user"]["id"]
+	data=requestObj["view"]["state"]["values"]
+	robot=data["robot"]["robot"]["value"]
+	environment=data["environment"]["environment"]["value"]
+	with open("userLib.json",'r') as userLib:
+		userData=json.load(userLib)
+	if "robots" in userData[user].keys():
+		userData[user]["robots"]=[{"robotName":robot,"environment":environment}]
+	else:
+		userData[user]["robots"].append({"robotName":robot,"environment":environment})
+	open("userLib.json",'w').close()
+	with open("userLib.json",'w') as userLib:
+		json.dump(userData, userLib)
+
+def SaveCredentials(requestObj):
+	data=requestObj["view"]["state"]["values"]
+	tenant=data["tenant"]["tenant"]["value"]
+	email=data["emailOrUsername"]["emailOrUsername"]["value"]
+	password=data["password"]["password"]["value"]
+	with open("userLib.json",'r') as userLib:
+		userData=json.load(userLib)
+	userData[requestObj["user"]["id"]] = {"email":email,"password":password,"tenant":tenant}
+	open("userLib.json",'w').close()
+	with open("userLib.json",'w') as userLib:
+		json.dump(userData, userLib)
+
 
 def processSelected(requestObj, user):
 	print("selected")
@@ -78,103 +118,26 @@ def processSelected(requestObj, user):
 	releaseKey=user.CreateRelease(process, environmentId)
 	user.StartJob(releaseKey)
 
-def SaveCredentials(requestObj):
-	data=requestObj["view"]["state"]["values"]
-	tenant=data["tenant"]["tenant"]["value"]
-	email=data["emailOrUsername"]["emailOrUsername"]["value"]
-	environment=data["environment"]["environment"]["value"]
-	password=data["password"]["password"]["value"]
-	robot=data["robot"]["robot"]["value"]
-	with open("userLib.json",'r') as userLib:
-		userData=json.load(userLib)
-	userData[requestObj["user"]["id"]] = {"email":email,"password":password,"tenant":tenant, "environment":environment, "robot":robot}
-	open("userLib.json",'w').close()
-	print(json.dumps(userData))
-	with open("userLib.json",'w') as userLib:
-		json.dump(userData, userLib)
 
-@app.route("/run", methods=["GET", "POST"])
-def startProcess():
-	userId=request.form['user_id']
-	user=User(userId)
-	if request.form["text"]:
-		return SearchProcess(request, user)
-	else:
-		return FavoriteProcesses(request, user)
-
-def SearchProcess(request, user):
+def SearchProcess(request, user, slackClient):
 	trigger=request.form['trigger_id']
 	searchTerm=request.form["text"]
 	processes=user.FilterProcess(searchTerm)
 	filteredProcesses=[]
 	if len(processes)<1:
 		return 	"No processes found",200
-	for x in processes:
-		filteredProcesses.append({
-			"text": {
-				"type": "plain_text",
-				"text": x["Id"],
-				"emoji": true
-			},
-			"value": str(x["Key"])
-		})
-	currentDialog=processSelectionDialog
-	currentDialog["blocks"][-1]["element"]["options"]=filteredProcesses
-	response=requests.post('https://slack.com/api/views.open',data={
-			"token" : slackToken,
-			"trigger_id" : trigger,
-			"view" : str(currentDialog)
-			})
+	slackClient.SendProcessSelection(processes, trigger)
 	return "",200
 
-def FavoriteProcesses(request, user):
+def FavoriteProcesses(request, user, slackClient):
 	trigger=request.form['trigger_id']
 	envProcessObj=user.GetEnvProcesses()
-	envProcesses=[]
-	for x in envProcessObj:
-		
-		envProcesses.append({
-			"text": {
-				"type": "plain_text",
-				"text": x["Name"],
-				"emoji": true
-			},
-			"value": str(x["Id"])
-		})
-	print (str(len(envProcessObj)))
-	if (len(envProcessObj)<1):
-		envProcesses.append({
-			"text": {
-				"type": "plain_text",
-				"text": "no processes found",
-				"emoji": true
-			},
-			"value": ""
-		})
-	currentDialog=releaseSelectionDialog
-	currentDialog["blocks"][-1]["element"]["options"]=envProcesses
-	response=requests.post('https://slack.com/api/views.open',data={
-			"token" : slackToken,
-			"trigger_id" : trigger,
-			"view" : str(currentDialog)
-			})
-	return "",200
-
-@app.route("/auth", methods=["GET", "POST"])
-def auth():
-	trigger=request.form['trigger_id']
-	user=request.form['user_id']
-	domain=request.form['team_domain']
-	channel=request.form['channel_id']
-	response=requests.post('https://slack.com/api/views.open',data={
-			"token" : slackToken,
-			"trigger_id" : trigger,
-			"view" : str(authDialog)
-			})
+	slackClient.SendEnvProcesses(envProcessObj, trigger)
 	return "",200
 
 	
-@app.route("/thanks", methods=["GET", "POST"])
+
+#@app.route("/thanks", methods=["GET", "POST"])
 def thanks():
 	"""
 	This route is called by Slack after the user installs our app. It will
@@ -191,4 +154,5 @@ def thanks():
 
 
 if __name__ == '__main__':
+	slackClient=Slack()
 	app.run(debug=True)

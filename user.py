@@ -3,8 +3,13 @@ import json
 
 class User:
 	def __init__(self, userID):
+		self.isComplete=False
 		with open("userLib.json",'r') as userLib:
 			userData=json.load(userLib)
+		if (userID not in userData.keys()):
+			print ("none")
+			self=None
+			return None
 		self.UserID=userID
 		self.Email=userData[userID]["email"]
 		self.Password=userData[userID]["password"]
@@ -12,11 +17,17 @@ class User:
 		self.Environment=userData[userID]["environment"]
 		self.Robot=userData[userID]["robot"]
 		self.token=self.GetToken()
+		if self.token is "":
+			return
+		self.isComplete=True
 
 	def GetToken(self):
 		authResponse=requests.post("https://platform.uipath.com/api/account/authenticate",headers={"Accept":"application/json"},data={"tenancyName":self.Tenant,"usernameOrEmailAddress":self.Email,"password":self.Password})
-		token=authResponse.json()["result"]
-		return token
+		if "result" in authResponse.json().keys():
+			token=authResponse.json()["result"]
+			return token
+		else:
+			return ""
 
 	def GetRobot(self):
 		robotResponse=requests.get("https://platform.uipath.com/odata/Robots?$filter=Name eq '{0}'".format(self.Robot),headers={"Authorization":"Bearer "+self.token})
@@ -28,7 +39,8 @@ class User:
 		return robotResponse.json()["value"][0]["Id"]
 	
 	def FilterProcess(self, searchTerm):
-		processResponse=requests.get("https://platform.uipath.com/odata/Processes?$filter=contains(tolower(Id)%20%2C%20tolower('{0}'))&$top=100".format(searchTerm),headers={"Authorization":"Bearer "+self.token})#?$filter=substringof(tolower('{0}',)
+		processResponse=requests.get("https://platform.uipath.com/odata/Processes?$filter=contains(tolower(Id)%20%2C%20tolower('{0}'))&$top=100".format(searchTerm),
+			headers={"Authorization":"Bearer "+self.token})
 		return processResponse.json()["value"]
 		
 	def CreateRelease(self,process,environment):
@@ -53,8 +65,8 @@ class User:
 		jobParams['startInfo']['NoOfRobots']=0
 		jobResponse=requests.post("https://platform.uipath.com/odata/Jobs/UiPath.Server.Configuration.OData.StartJobs",
 			headers={"Authorization":"Bearer "+token,"Content-Type":"application/json"},json=jobParams)
-		print ("starting job\n\n")
-	
+		print ("starting job\n")
+
 	def CreateJob(self, process):
 		if type(process) is int:
 			resp=requests.post("http://platform.uipath.com/odata/Releases?$filter=Id eq {0}".format(process),headers={"Authorization":"Bearer "+self.token})
@@ -66,4 +78,5 @@ class User:
 
 	def GetEnvProcesses(self):
 		return requests.get("https://platform.uipath.com/odata/Releases?$filter=EnvironmentName%20eq%20'{0}'".format(self.Environment),headers={"Authorization":"Bearer "+self.token}).json()["value"]
+	
 	

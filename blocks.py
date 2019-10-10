@@ -112,11 +112,11 @@ class Block:
 				"optional": false,
 				"label": {
 					"type": "plain_text",
-					"text": "tenant name"
+					"text": "Tenant Name"
 				},
 				"hint": {
 					"type": "plain_text",
-					"text": "name of your tenant"
+					"text": "Name of your tenant."
 				},
 				"element": {
 					"action_id": "tenant",
@@ -133,7 +133,7 @@ class Block:
 				},
 				"hint": {
 					"type": "plain_text",
-					"text": "Username to log into your orchestrator instance"
+					"text": "Username to log into your orchestrator instance."
 				},
 				"element": {
 					"action_id": "emailOrUsername",
@@ -150,24 +150,47 @@ class Block:
 				},
 				"hint": {
 					"type": "plain_text",
-					"text": "password for your orchestrator instance"
+					"text": "Password for your orchestrator instance."
 				},
 				"element": {
 					"action_id": "password",
 					"type": "plain_text_input"
 				}
-			},
+			}
+		],
+		"close": {
+			"type": "plain_text",
+			"text": ":no_entry_sign: Cancel",
+			"emoji": true
+		},
+		"submit": {
+			"type": "plain_text",
+			"text": "Submit Credentials"
+		},
+		"private_metadata": "auth",
+		"clear_on_close": false,
+		"notify_on_close": true
+		}
+
+
+	RobotDialog={
+		"title": {
+			"type": "plain_text",
+			"text": "Authenticate"
+		},
+		"type": "modal",
+		"blocks": [
 			{
 				"type": "input",
 				"block_id": "robot",
 				"optional": false,
 				"label": {
 					"type": "plain_text",
-					"text": "robot"
+					"text": "Robot Name"
 				},
 				"hint": {
 					"type": "plain_text",
-					"text": "name of your robot"
+					"text": "Name of your robot."
 				},
 				"element": {
 					"action_id": "robot",
@@ -180,11 +203,11 @@ class Block:
 				"optional": false,
 				"label": {
 					"type": "plain_text",
-					"text": "environment"
+					"text": "Environment Name"
 				},
 				"hint": {
 					"type": "plain_text",
-					"text": "name of your environment"
+					"text": "Name of your environment."
 				},
 				"element": {
 					"action_id": "environment",
@@ -201,7 +224,7 @@ class Block:
 			"type": "plain_text",
 			"text": "Submit Credentials"
 		},
-		"private_metadata": "auth",
+		"private_metadata": "RobotAdd",
 		"clear_on_close": false,
 		"notify_on_close": true
 		}
